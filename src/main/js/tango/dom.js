@@ -106,7 +106,7 @@ function ensureInlineAutoSolveButton() {
   const existingButton = doc.getElementById(INLINE_AUTOSOLVE_BUTTON_ID);
   if (existingButton) {
     if (!controlsDiv.contains(existingButton)) {
-      const existingWrapper = existingButton.closest('span.under-board-controls-item');
+      const existingWrapper = getButtonWrapper(existingButton);
       if (existingWrapper) {
         controlsDiv.appendChild(existingWrapper);
       } else {
@@ -116,14 +116,14 @@ function ensureInlineAutoSolveButton() {
     return true;
   }
 
-  const nativeWrapper = controlsDiv.querySelector('span.under-board-controls-item');
+  const nativeButton = controlsDiv.querySelector('button');
+  const nativeWrapper = getButtonWrapper(nativeButton);
   const wrapper = nativeWrapper ? nativeWrapper.cloneNode(false) : doc.createElement('span');
-  if (!wrapper.classList.contains('under-board-controls-item')) {
+  if (wrapper.tagName === 'SPAN' && !wrapper.classList.contains('under-board-controls-item')) {
     wrapper.classList.add('under-board-controls-item');
   }
 
-  const nativeButton = nativeWrapper?.querySelector('button') ?? controlsDiv.querySelector('button');
-  const solveButton = nativeButton ? nativeButton.cloneNode(false) : doc.createElement('button');
+  const solveButton = nativeButton ? nativeButton.cloneNode(true) : doc.createElement('button');
   // remove any disabled state that might have been copied from the native
   // element; we always want this button enabled.
   solveButton.removeAttribute('disabled');
@@ -133,10 +133,7 @@ function ensureInlineAutoSolveButton() {
   solveButton.setAttribute('data-control-btn', 'auto-solve');
   solveButton.setAttribute('aria-disabled', 'false');
 
-  const textSpan = doc.createElement('span');
-  textSpan.className = 'artdeco-button__text';
-  textSpan.textContent = 'Auto Solve';
-  solveButton.replaceChildren(textSpan);
+  setButtonText(solveButton, doc, 'Auto Solve');
   solveButton.addEventListener('click', () => {
     autoSolve();
   });
@@ -144,6 +141,35 @@ function ensureInlineAutoSolveButton() {
   wrapper.replaceChildren(solveButton);
   controlsDiv.appendChild(wrapper);
   return true;
+}
+
+function getButtonWrapper(button) {
+  if (!button) {
+    return null;
+  }
+  const parent = button.parentElement;
+  if (!parent) {
+    return null;
+  }
+  if (parent.matches('span.under-board-controls-item, [data-control-btn-container]')) {
+    return parent;
+  }
+  if (parent.childElementCount === 1) {
+    return parent;
+  }
+  return null;
+}
+
+function setButtonText(button, doc, label) {
+  const textContainer = button.querySelector('.artdeco-button__text, span span, span');
+  if (textContainer) {
+    textContainer.textContent = label;
+    return;
+  }
+  const textSpan = doc.createElement('span');
+  textSpan.className = 'artdeco-button__text';
+  textSpan.textContent = label;
+  button.replaceChildren(textSpan);
 }
 
 function getControlsDiv() {
@@ -168,22 +194,19 @@ function getTangoGridDivForButtonInstall() {
 }
 
 function getSiblingButtonContainer(gridDiv) {
-  const gridParent = gridDiv.parentElement;
-  const row = gridParent?.parentElement;
-  if (!row) {
-    return null;
-  }
-  const children = Array.from(row.children);
-  const idx = children.indexOf(gridParent);
-  for (let i = idx + 1; i < children.length; i++) {
-    if (children[i].querySelector('button')) {
-      return children[i];
+  let current = gridDiv;
+  for (let depth = 0; depth < 6 && current?.parentElement; depth++) {
+    const parent = current.parentElement;
+    const siblings = Array.from(parent.children).filter(c => c !== current);
+    for (const sibling of siblings) {
+      if (sibling.tagName === 'BUTTON') {
+        return sibling.parentElement ?? sibling;
+      }
+      if (sibling.querySelector('button')) {
+        return sibling;
+      }
     }
-  }
-  for (let i = idx - 1; i >= 0; i--) {
-    if (children[i].querySelector('button')) {
-      return children[i];
-    }
+    current = parent;
   }
   return null;
 }

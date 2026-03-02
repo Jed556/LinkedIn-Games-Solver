@@ -1,3 +1,5 @@
+import { extractRemainingLinkedInGameAnswers } from '../remainingGamesExtractor.js';
+
 const polyfilledBrowser = (typeof browser !== 'undefined') ? browser : chrome;
 
 const gameConfig = {
@@ -23,10 +25,22 @@ const gameConfig = {
         solverHook: 'tangoPopupButtonOnClick',
         previewHook: 'tangoPopupPreviewData',
     },
+    pinpoint: {
+        externalSource: true,
+    },
+    crossclimb: {
+        externalSource: true,
+    },
 };
+
+const ZIP_GRADIENT_PALETTES = [
+    ['#f43f5e', '#f97316'],
+    ['#34d399', '#16a34a'],
+];
 
 const game = document.body?.dataset?.game;
 const backBtn = document.getElementById('backBtn');
+const refreshBtn = document.getElementById('refreshBtn');
 const settingsBtn = document.getElementById('settingsBtn');
 const autoSolveBtn = document.getElementById('autoSolveBtn');
 const modal = document.getElementById('modal');
@@ -50,6 +64,16 @@ function initialize() {
         });
     }
 
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            if (gameConfig[game]?.externalSource) {
+                loadExternalAnswers();
+                return;
+            }
+            hydratePageState();
+        });
+    }
+
     if (autoSolveBtn) {
         autoSolveBtn.addEventListener('click', () => {
             solveActiveGame();
@@ -60,8 +84,12 @@ function initialize() {
 }
 
 function setStatus(message) {
-    if (status) {
+    if (!status) return;
+    if (typeof message === 'string') {
         status.textContent = message;
+    } else if (message instanceof Node) {
+        status.innerHTML = '';
+        status.appendChild(message);
     }
 }
 
@@ -71,6 +99,21 @@ async function hydratePageState() {
         if (autoSolveBtn) {
             autoSolveBtn.disabled = true;
         }
+        return;
+    }
+
+    const config = gameConfig[game];
+    if (config.externalSource) {
+        activeTab = null;
+        if (autoSolveBtn) {
+            autoSolveBtn.disabled = true;
+            autoSolveBtn.textContent = 'Solve';
+        }
+        if (modal) {
+            modal.style.display = 'none';
+        }
+        setStatus('');
+        await loadExternalAnswers();
         return;
     }
 
@@ -92,7 +135,7 @@ async function hydratePageState() {
         return;
     }
 
-    const { matcher } = gameConfig[game];
+    const { matcher } = config;
     const isMatchingTab = matcher(activeTab.url);
     if (autoSolveBtn) {
         autoSolveBtn.disabled = !isMatchingTab;
@@ -134,7 +177,113 @@ function clearPreview() {
     }
 }
 
+function getDailySolutionsCandidateUrls() {
+    const now = new Date();
+    const dates = [new Date(now), new Date(now)];
+    dates[1].setDate(dates[1].getDate() - 1);
+    return dates.map((d) => {
+        const month = d.toLocaleString('en-US', { month: 'long' }).toLowerCase();
+        const day = d.getDate();
+        const year = d.getFullYear();
+        return `https://fandomwire.com/all-linkedin-games-solutions-for-today-${month}-${day}-${year}/`;
+    });
+}
+
+async function fetchDailySolutionsContent() {
+    const candidates = getDailySolutionsCandidateUrls();
+    for (const url of candidates) {
+        try {
+            const response = await fetch(url, { method: 'GET' });
+            if (!response.ok) {
+                continue;
+            }
+            const content = await response.text();
+            if (content && content.includes('LinkedIn')) {
+                return { content, url };
+            }
+        } catch (_e) {
+        }
+    }
+    return { content: null, url: null };
+}
+
+function renderAnswerCard(title, lines) {
+    if (!previewContainer) {
+        return;
+    }
+    const card = document.createElement('div');
+    card.className = 'remaining-answer-card';
+
+    const heading = document.createElement('h3');
+    heading.className = 'remaining-answer-title';
+    heading.textContent = title;
+    card.appendChild(heading);
+
+    for (const line of lines) {
+        const row = document.createElement('p');
+        row.className = 'remaining-answer-line';
+        row.textContent = line;
+        card.appendChild(row);
+    }
+    previewContainer.appendChild(card);
+}
+
+async function loadExternalAnswers() {
+    clearPreview();
+    setStatus('Fetching answer...');
+    const { content, url } = await fetchDailySolutionsContent();
+    if (!content) {
+        setStatus('Could not fetch daily solutions right now.');
+        return;
+    }
+    const extracted = extractRemainingLinkedInGameAnswers(content);
+    if (game === 'pinpoint') {
+        if (!extracted.pinpointAnswer) {
+            setStatus('Pinpoint answer not found in article.');
+            return;
+        }
+        renderAnswerCard('Pinpoint Answer', [extracted.pinpointAnswer]);
+        if (status) {
+            const link = document.createElement('a');
+            link.href = url;
+            link.textContent = url;
+            link.target = '_blank';
+            setStatus('Source: ');
+            status.appendChild(link);
+        }
+        return;
+    }
+
+    if (game === 'crossclimb') {
+        const crossclimb = extracted.crossclimb;
+        if (!crossclimb || (crossclimb.ladderWords.length === 0
+            && crossclimb.finalTwoWords.length === 0)) {
+            setStatus('Crossclimb answers not found in article.');
+            return;
+        }
+        if (crossclimb.ladderWords.length > 0) {
+            renderAnswerCard('First Five', [crossclimb.ladderWords.join(' → ')]);
+        }
+        if (crossclimb.orderedHint.length > 0) {
+            renderAnswerCard('Ordered Ladder', [crossclimb.orderedHint.join(' → ')]);
+        }
+        if (crossclimb.finalTwoWords.length > 0) {
+            renderAnswerCard('Final Two', [crossclimb.finalTwoWords.join(' + ')]);
+        }
+        const link = document.createElement('a');
+        link.href = url;
+        link.textContent = url;
+        link.target = '_blank';
+        setStatus('Source: ');
+        status.appendChild(link);
+    }
+}
+
 async function loadPreview() {
+    if (gameConfig[game]?.externalSource) {
+        await loadExternalAnswers();
+        return;
+    }
     if (!game || !activeTab?.id) {
         clearPreview();
         return;
@@ -210,17 +359,19 @@ function renderZipPreview(data) {
 
         const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
         const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
-        gradient.setAttribute('id', 'zipPreviewGradient');
+        const gradientId = `zipPreviewGradient-${Math.random().toString(36).slice(2, 8)}`;
+        const [startColor, endColor] = ZIP_GRADIENT_PALETTES[Math.floor(Math.random() * ZIP_GRADIENT_PALETTES.length)];
+        gradient.setAttribute('id', gradientId);
         gradient.setAttribute('x1', '0%');
         gradient.setAttribute('y1', '0%');
         gradient.setAttribute('x2', '100%');
         gradient.setAttribute('y2', '100%');
         const stopA = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
         stopA.setAttribute('offset', '0%');
-        stopA.setAttribute('stop-color', '#d946ef');
+        stopA.setAttribute('stop-color', startColor);
         const stopB = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
         stopB.setAttribute('offset', '100%');
-        stopB.setAttribute('stop-color', '#1d4ed8');
+        stopB.setAttribute('stop-color', endColor);
         gradient.appendChild(stopA);
         gradient.appendChild(stopB);
         defs.appendChild(gradient);
@@ -234,6 +385,7 @@ function renderZipPreview(data) {
             return `${(col * 34) + 17},${(row * 34) + 17}`;
         });
         polyline.setAttribute('points', points.join(' '));
+        polyline.style.stroke = `url(#${gradientId})`;
         svg.appendChild(polyline);
         grid.appendChild(svg);
     }
@@ -324,15 +476,18 @@ function renderTangoPreview(data) {
 }
 
 function getSunSvgMarkup() {
-    return `<svg width="31" height="31" viewBox="0 0 31 31" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sun" class="lotka-cell-content-img"><title>Sun</title><g id="Sun"><path class="lotka-cell-zero-path" id="Vector" d="M29.25 15.4989C29.25 23.0943 23.0937 29.25 15.5 29.25C7.90629 29.25 1.75 23.0943 1.75 15.4989C1.75 7.90583 7.90619 1.75 15.5 1.75C23.0938 1.75 29.25 7.90583 29.25 15.4989Z" stroke-width="2"></path></g></svg>`;
+    return `<svg width="31" height="31" viewBox="0 0 31 31" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sun" class="lotka-cell-content-img fade-in"><title>Sun</title><g id="Sun"><path class="lotka-cell-zero-path" id="Vector" d="M29.25 15.4989C29.25 23.0943 23.0937 29.25 15.5 29.25C7.90629 29.25 1.75 23.0943 1.75 15.4989C1.75 7.90583 7.90619 1.75 15.5 1.75C23.0938 1.75 29.25 7.90583 29.25 15.4989Z" stroke-width="2"></path></g></svg>`;
 }
 
 function getMoonSvgMarkup() {
-    const clipId = `clip0_3574_67936_${Math.random().toString(36).slice(2, 8)}`;
-    return `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Moon"><title>Moon</title><g id="Moon"><g clip-path="url(#${clipId})"><path class="lotka-cell-one-path" id="Subtract" d="M8.10583 19.9024C15.2282 18.6466 19.2619 11.9868 17.0757 5.09295C16.8785 4.47115 16.6376 3.86915 16.3574 3.28957C16.3507 3.27584 16.3467 3.26256 16.3446 3.24986C20.5748 4.17473 24.0337 7.5648 24.8316 12.0899C25.8865 18.0727 21.8917 23.778 15.9088 24.8329C11.4675 25.616 7.17692 23.6165 4.82974 20.0826C4.84051 20.0805 4.85231 20.0796 4.86526 20.0804C5.93904 20.1476 7.02621 20.0928 8.10583 19.9024Z" stroke-width="2"></path><circle id="Cut" cx="12" cy="12" r="12" transform="matrix(0.984808 -0.173648 0.302281 0.953219 -11.1387 -1.87585)"></circle></g></g><defs><clipPath id="${clipId}"><rect x="0.0976562" y="4.26611" width="24" height="24" rx="12" transform="rotate(-10 0.0976562 4.26611)" fill="white"></rect></clipPath></defs></svg>`;
+    return `<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Moon" class="lotka-cell-content-img fade-in"><title>Moon</title><g id="Moon"><g clip-path="url(#clip0_3574_67936)"><path class="lotka-cell-one-path" id="Subtract" d="M8.10583 19.9024C15.2282 18.6466 19.2619 11.9868 17.0757 5.09295C16.8785 4.47115 16.6376 3.86915 16.3574 3.28957C16.3507 3.27584 16.3467 3.26256 16.3446 3.24986C20.5748 4.17473 24.0337 7.5648 24.8316 12.0899C25.8865 18.0727 21.8917 23.778 15.9088 24.8329C11.4675 25.616 7.17692 23.6165 4.82974 20.0826C4.84051 20.0805 4.85231 20.0796 4.86526 20.0804C5.93904 20.1476 7.02621 20.0928 8.10583 19.9024Z" stroke-width="2"></path><circle id="Cut" cx="12" cy="12" r="12" transform="matrix(0.984808 -0.173648 0.302281 0.953219 -11.1387 -1.87585)"></circle></g></g><defs><clipPath id="clip0_3574_67936"><rect x="0.0976562" y="4.26611" width="24" height="24" rx="12" transform="rotate(-10 0.0976562 4.26611)" fill="white"></rect></clipPath></defs></svg>`;
 }
 
 function solveActiveGame() {
+    if (gameConfig[game]?.externalSource) {
+        setStatus('Solve is not available yet for this game.');
+        return;
+    }
     if (!game || !activeTab?.id) {
         setStatus('No active game tab found.');
         return;

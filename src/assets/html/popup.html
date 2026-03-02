@@ -11,7 +11,9 @@
 <body>
   <div class="top-bar">
     <span></span>
-    <button id="openSettingsBtn" class="icon-btn" type="button" aria-label="Settings">⚙</button>
+    <button id="openSettingsBtn" class="icon-btn" type="button" aria-label="Settings">
+      <img src="./images/settings-icon.svg" alt="Settings" class="icon">
+    </button>
   </div>
 
   <h1>LinkedIn Puzzle Cracker</h1>
@@ -49,7 +51,21 @@
     <img src="./images/Tango_logo.svg" alt="Tango Logo" class="logo">
   </button>
 
-  <p class="subtitle stay-tuned">Stay tuned for new games...</p>
+  <button class="game" data-game="pinpoint" style="background-color:#ffe7cb" type="button">
+    <span class="text">
+      <span class="subtitle">Guess the Category</span>
+      <span class="title">Pinpoint</span>
+    </span>
+    <img src="./images/Pinpoint_logo.svg" alt="Pinpoint Logo" class="logo">
+  </button>
+
+  <button class="game" data-game="crossclimb" style="background-color:#dff3e3" type="button">
+    <span class="text">
+      <span class="subtitle">Word Ladder Challenge</span>
+      <span class="title">Crossclimb</span>
+    </span>
+    <img src="./images/Crossclimb_logo.svg" alt="Crossclimb Logo" class="logo">
+  </button>
 
   <script src="popup.js" defer></script>
 </body>

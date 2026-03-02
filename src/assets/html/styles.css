@@ -132,13 +132,30 @@ p {
     margin-bottom: 6px;
 }
 
+.top-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
 .icon-btn {
     border: none;
     background: transparent;
     cursor: pointer;
-    font-size: 18px;
-    padding: 6px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
     border-radius: 8px;
+}
+
+/* slightly smaller for navigation controls */
+#backBtn.icon-btn,
+#refreshBtn.icon-btn {
+    width: 28px;
+    height: 28px;
 }
 
 .icon-btn:hover {
@@ -328,8 +345,33 @@ p {
 .preview-container {
     margin: 8px 0;
     display: flex;
+    flex-direction: column;
+    gap: 8px;
     justify-content: center;
     align-items: center;
+}
+
+.remaining-answer-card {
+    width: 100%;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #fff;
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+.remaining-answer-title {
+    margin: 0 0 6px;
+    color: #111827;
+    font-size: 14px;
+}
+
+.remaining-answer-line {
+    margin: 0;
+    color: #1f2937;
+    font-size: 13px;
+    line-height: 1.35;
+    word-break: break-word;
 }
 
 .zip-preview {
@@ -346,6 +388,8 @@ p {
     height: 34px;
     border: 1px solid #d1d5db;
     background: #fff;
+    position: relative;
+    z-index: 1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -359,6 +403,8 @@ p {
     border-radius: 999px;
     background: #000;
     color: #fff;
+    position: relative;
+    z-index: 3;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -386,13 +432,14 @@ p {
 .zip-preview-line {
     position: absolute;
     inset: 0;
+    z-index: 2;
     pointer-events: none;
 }
 
 .zip-preview-polyline {
     fill: none;
     stroke: url(#zipPreviewGradient);
-    stroke-width: 14;
+    stroke-width: 16;
     stroke-linecap: round;
     stroke-linejoin: round;
 }
