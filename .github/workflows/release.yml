@@ -1,0 +1,65 @@
+name: Release on tag
+
+on:
+  push:
+    tags: [ '*' ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+      commit:
+        description: 'Commit-ish to tag'
+        required: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Get tag version
+      id: tag
+      shell: bash
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION="${GITHUB_REF#refs/tags/}"
+        fi
+        if [ -z "$VERSION" ]; then
+          echo "Error: no tag found in ref or input!" >&2
+          exit 1
+        fi
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+    - uses: actions/checkout@v6
+
+    - name: Install dependencies
+      run: |
+        npm ci
+
+    - name: Build extension
+      run: |
+        npm run build
+
+    - name: Package chrome
+      run: |
+        mkdir -p release
+        7z a "release/LinkedInGamesSolver_${{ steps.tag.outputs.VERSION }}_chrome.zip" chrome-dist/* -mx9
+
+    - name: Package firefox
+      run: |
+        mkdir -p release
+        7z a "release/LinkedInGamesSolver_${{ steps.tag.outputs.VERSION }}_firefox.zip" firefox-dist/* -mx9
+
+    - name: Create or update GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.tag.outputs.VERSION }}
+        target_commitish: ${{ github.event.inputs.commit || github.sha }}
+        files: |
+          release/LinkedInGamesSolver_${{ steps.tag.outputs.VERSION }}_chrome.zip
+          release/LinkedInGamesSolver_${{ steps.tag.outputs.VERSION }}_firefox.zip
+        overwrite_files: true
+        token: ${{ secrets.GITHUB_TOKEN }}
