@@ -1,0 +1,553 @@
+import { getGridDiv, anticipateOneMutation, sleep } from '../util.js';
+import { learnMarkStrategy } from './markStrategy.js';
+import { solveTango } from './solver.js';
+import { getSettings } from '../settings.js';
+
+const INLINE_AUTOSOLVE_BUTTON_ID = 'linkedin-games-solver-tango-inline-autosolve';
+const INLINE_AUTOSOLVE_MAX_RETRIES = 30;
+let inlineAutoSolveObserver = null;
+let inlineAutoSolveRetryTimer = null;
+let inlineAutoSolveRetryCount = 0;
+
+export async function autoSolve() {
+  const settings = await getSettings();
+  const delayMs = settings.delays.tango;
+  const prioritizedApis = [new TangoDomApiV1(), new TangoDomApiV0()];
+  for (let i = 0; i < prioritizedApis.length;) {
+    const api = prioritizedApis[i];
+    try {
+      await api.autoSolve(delayMs);
+      return;
+    } catch (e) {
+      console.error(e);
+      if (++i !== prioritizedApis.length) {
+        console.info('Will reattempt autoSolve() via a prior API');
+      } else {
+        console.error('All APIs exhausted');
+      }
+    }
+  }
+}
+
+export async function getPreviewData() {
+  const prioritizedApis = [new TangoDomApiV1(), new TangoDomApiV0()];
+  for (let i = 0; i < prioritizedApis.length;) {
+    const api = prioritizedApis[i];
+    try {
+      return await api.getPreviewData();
+    } catch (e) {
+      console.error(e);
+      if (++i !== prioritizedApis.length) {
+        console.info('Will reattempt getPreviewData() via a prior API');
+      } else {
+        console.error('All APIs exhausted');
+      }
+    }
+  }
+  return null;
+}
+
+export async function installInlineAutoSolveButton() {
+  const settings = await getSettings();
+  if (!settings.showInlineAutoSolveButton) {
+    return;
+  }
+  ensureInlineAutoSolveButton();
+  ensureInlineAutoSolveObserver();
+  ensureInlineAutoSolveRetryLoop();
+}
+
+function ensureInlineAutoSolveRetryLoop() {
+  if (inlineAutoSolveRetryTimer) {
+    return;
+  }
+  inlineAutoSolveRetryTimer = setInterval(() => {
+    const hasButton = ensureInlineAutoSolveButton();
+    ensureInlineAutoSolveObserver();
+    if (hasButton || ++inlineAutoSolveRetryCount >= INLINE_AUTOSOLVE_MAX_RETRIES) {
+      clearInterval(inlineAutoSolveRetryTimer);
+      inlineAutoSolveRetryTimer = null;
+      inlineAutoSolveRetryCount = 0;
+    }
+  }, 1000);
+}
+
+function ensureInlineAutoSolveObserver() {
+  if (inlineAutoSolveObserver) {
+    return;
+  }
+  let controlsDiv;
+  try {
+    controlsDiv = getControlsDiv();
+  } catch (_e) {
+    return;
+  }
+
+  const doc = controlsDiv.ownerDocument;
+  const observerTarget = controlsDiv.parentElement ?? doc.body;
+  inlineAutoSolveObserver = new MutationObserver(() => {
+    ensureInlineAutoSolveButton();
+  });
+  inlineAutoSolveObserver.observe(observerTarget, {
+    childList: true,
+    subtree: true,
+  });
+}
+
+function ensureInlineAutoSolveButton() {
+  let controlsDiv;
+  try {
+    controlsDiv = getControlsDiv();
+  } catch (_e) {
+    return false;
+  }
+
+  const doc = controlsDiv.ownerDocument;
+  const existingButton = doc.getElementById(INLINE_AUTOSOLVE_BUTTON_ID);
+  if (existingButton) {
+    if (!controlsDiv.contains(existingButton)) {
+      const existingWrapper = existingButton.closest('span.under-board-controls-item');
+      if (existingWrapper) {
+        controlsDiv.appendChild(existingWrapper);
+      } else {
+        controlsDiv.appendChild(existingButton);
+      }
+    }
+    return true;
+  }
+
+  const nativeWrapper = controlsDiv.querySelector('span.under-board-controls-item');
+  const wrapper = nativeWrapper ? nativeWrapper.cloneNode(false) : doc.createElement('span');
+  if (!wrapper.classList.contains('under-board-controls-item')) {
+    wrapper.classList.add('under-board-controls-item');
+  }
+
+  const nativeButton = nativeWrapper?.querySelector('button') ?? controlsDiv.querySelector('button');
+  const solveButton = nativeButton ? nativeButton.cloneNode(false) : doc.createElement('button');
+  // remove any disabled state that might have been copied from the native
+  // element; we always want this button enabled.
+  solveButton.removeAttribute('disabled');
+  solveButton.removeAttribute('aria-disabled');
+  solveButton.id = INLINE_AUTOSOLVE_BUTTON_ID;
+  solveButton.type = 'button';
+  solveButton.setAttribute('data-control-btn', 'auto-solve');
+  solveButton.setAttribute('aria-disabled', 'false');
+
+  const textSpan = doc.createElement('span');
+  textSpan.className = 'artdeco-button__text';
+  textSpan.textContent = 'Auto Solve';
+  solveButton.replaceChildren(textSpan);
+  solveButton.addEventListener('click', () => {
+    autoSolve();
+  });
+
+  wrapper.replaceChildren(solveButton);
+  controlsDiv.appendChild(wrapper);
+  return true;
+}
+
+function getControlsDiv() {
+  try {
+    const preferred = getGridDiv(d => d.querySelector(
+      '.lotka-under-board-controls-container, [data-testid="under-board-controls-container"], [data-testid="under-board-controls"]'));
+    if (preferred) {
+      return preferred;
+    }
+  } catch (_e) {
+  }
+  const gridDiv = getTangoGridDivForButtonInstall();
+  const fallback = getSiblingButtonContainer(gridDiv);
+  if (fallback) {
+    return fallback;
+  }
+  throw new Error('Could not locate Tango controls container');
+}
+
+function getTangoGridDivForButtonInstall() {
+  return getGridDiv(d => d.querySelector('[data-testid="interactive-grid"], .lotka-grid'));
+}
+
+function getSiblingButtonContainer(gridDiv) {
+  const gridParent = gridDiv.parentElement;
+  const row = gridParent?.parentElement;
+  if (!row) {
+    return null;
+  }
+  const children = Array.from(row.children);
+  const idx = children.indexOf(gridParent);
+  for (let i = idx + 1; i < children.length; i++) {
+    if (children[i].querySelector('button')) {
+      return children[i];
+    }
+  }
+  for (let i = idx - 1; i >= 0; i--) {
+    if (children[i].querySelector('button')) {
+      return children[i];
+    }
+  }
+  return null;
+}
+
+class TangoDomApiV1 {
+
+  async autoSolve(delayMs = 0) {
+    // Extract
+    const hydrationScript = this.getHydrationScript();
+    const solution = this.getSolution(hydrationScript);
+    console.info('Solution identified:', solution);
+    const gridSize = this.getGridSize(hydrationScript);
+    const cellCount = gridSize * gridSize;
+    const presetCells = this.getPresetCells(hydrationScript, cellCount);
+    const gridDiv = this.getTangoGridDiv();
+    const [cellDivs, clickableCell] =
+      this.transformTangoGridDiv(gridDiv, presetCells, cellCount);
+    // Explore
+    const markStrategy = await learnMarkStrategy(
+      clickableCell,
+      c => this.getCellDivIsBlank(c));
+    // Dispatch
+    await this.clickCells(cellDivs, solution, markStrategy, presetCells, delayMs);
+  }
+
+  getPreviewData() {
+    const hydrationScript = this.getHydrationScript();
+    const solution = this.getSolution(hydrationScript);
+    const size = this.getGridSize(hydrationScript);
+    const cellCount = size * size;
+    const presetCells = this.getPresetCells(hydrationScript, cellCount);
+    const cells = new Array(cellCount).fill(null).map((_, idx) => ({
+      value: solution[idx] === 1 ? 'Sun' : 'Moon',
+      isPreset: presetCells[idx],
+    }));
+    return { size, cells };
+  }
+
+  getHydrationScript() {
+    return this.orElseThrow(
+      getGridDiv(d => d.getElementById('rehydrate-data')),
+      'getHydrationScript',
+      'No script with id rehydrate-data found')
+      .textContent;
+  }
+
+  getGridSize(hydrationScript) {
+    const indicator = '\\"gridSize\\"';
+    const anchor = hydrationScript.indexOf(indicator);
+    if (anchor < 0) {
+      this.orElseThrow(null, 'getGridSize', 'Failed to locate indicator');
+    }
+    const start = hydrationScript.indexOf(':', anchor + indicator.length) + 1;
+    const end = hydrationScript.indexOf(',', start);
+    const substring = hydrationScript.substring(start, end);
+    return JSON.parse(substring);
+  }
+
+  getPresetCells(hydrationScript, cellCount) {
+    const indicator = '\\"presetCellIdxes\\"';
+    const anchor = hydrationScript.indexOf(indicator);
+    if (anchor < 0) {
+      this.orElseThrow(null, 'getPresetCells', 'Failed to locate indicator');
+    }
+    const start = hydrationScript.indexOf('[', anchor + indicator.length);
+    const end = hydrationScript.indexOf(']', start);
+    const substring = hydrationScript.substring(start, end + 1);
+    const result = new Array(cellCount).fill(false);
+    const parsed = JSON.parse(substring);
+    for (const idx of parsed) {
+      if (idx >= cellCount || idx < 0) {
+        this.orElseThrow(null, 'getPresetCells', `idx ${idx} out of bounds`);
+      }
+      result[idx] = true;
+    }
+    return result;
+  }
+
+  getTangoGridDiv() {
+    return this.orElseThrow(
+      getGridDiv(d => d.querySelector('[data-testid="interactive-grid"]')),
+      'getTangoGridDiv', 'TangoGridDiv selector yielded nothing');
+  }
+
+  transformTangoGridDiv(gridDiv, presetCells, cellCount) {
+    const filtered = Array.from(gridDiv.children)
+      .filter(c => this.getCellDivDataCellIdx(c));
+    if (filtered.length !== cellCount) {
+      this.orElseThrow(null, 'transformTangoGridDiv', 'gridDiv contained '
+        + filtered.length + ' cells matching filter, expected ' + cellCount);
+    }
+    // Collect cellDivs
+    const cellDivs = new Array(cellCount);
+    for (const cellDiv of filtered) {
+      const idx = this.getCellDivIdx(cellDiv);
+      cellDivs[idx] = cellDiv;
+    }
+    const nullIdx = cellDivs.findIndex(e => !e);
+    if (nullIdx >= 0) {
+      this.orElseThrow(null, 'transformTangoGridDiv',
+        `Undefined cell div at position ${nullIdx}`);
+    }
+    // Identify any clickable cell
+    let cellIdx = presetCells.findIndex(e => !e);
+    if (cellIdx < 0) {
+      this.orElseThrow(null, 'transformTangoGridDiv', 'No free cells found');
+    }
+    return [cellDivs, cellDivs[cellIdx]];
+  }
+
+  getCellDivIdx(cellDiv) {
+    const dataCellIdx = this.getCellDivDataCellIdx(cellDiv);
+    return parseInt(this.orElseThrow(dataCellIdx, 'getIdFromCellDiv',
+      `Failed to parse an integer data cell ID from ${dataCellIdx}`));
+  }
+
+  getCellDivDataCellIdx(gridDivChild) {
+    return gridDivChild.attributes?.getNamedItem('data-cell-idx')?.value;
+  }
+
+  getCellDivIsBlank(cellDiv) {
+    return !!cellDiv.querySelector('[data-testid="cell-empty"]');
+  }
+
+  getSolution(hydrationScript) {
+    return this.processSolution(this.getRawSolution(hydrationScript));
+  }
+
+  getRawSolution(hydrationScript) {
+    const indicator = '\\"solution\\"';
+    const anchor = hydrationScript.indexOf(indicator);
+    if (anchor < 0) {
+      this.orElseThrow(null, 'getSolution', 'Failed to locate indicator');
+    }
+    const start = hydrationScript.indexOf('[', anchor + indicator.length);
+    const end = hydrationScript.indexOf(']', start);
+    const substring = hydrationScript.substring(start, end + 1);
+    return JSON.parse(substring.replaceAll('\\', ''));
+  }
+
+  processSolution(rawSolution) {
+    return rawSolution.map((x) => {
+      if ('LotkaCellValue_ZERO' === x) {
+        return 1;
+      } else if ('LotkaCellValue_ONE' === x) {
+        return 2;
+      } else {
+        this.orElseThrow(null, 'processSolution',
+          `Unexpected rawSolution entry ${x} in ${rawSolution}`);
+      }
+    });
+  }
+
+  orElseThrow(result, fname, cause) {
+    if (result != null) {
+      return result;
+    }
+    throw new Error(`${fname} failed using TangoDomApiV1: ${cause}`);
+  }
+
+  async clickCells(cellDivs, solution, markStrategy, presetCells, delayMs = 0) {
+    if (cellDivs.length !== solution.length) {
+      throw new Error(`cellDivs length ${cellDivs.length} does not match `
+        + `solution length ${solution.length}`);
+    }
+    for (let i = 0; i < solution.length; i++) {
+      if (presetCells[i]) {
+        continue;
+      }
+      const cellDiv = cellDivs[i];
+      const currentMark = markStrategy.getCellDivColor(cellDiv);
+      const desiredMark = solution[i];
+      for (let j = currentMark; j !== desiredMark; j = (j + 1) % 3) {
+        await anticipateOneMutation(cellDiv, i);
+        await sleep(delayMs);
+      }
+    }
+  }
+
+}
+
+class TangoDomApiV0 {
+
+  async autoSolve(delayMs = 0) {
+    // Extract
+    const gridDiv = this.getTangoGridDiv();
+    const cellDivs = this.#getCellDivsFromGridDiv(gridDiv);
+    const clickableCell = this.getClickableCell(cellDivs);
+    // Explore
+    const markStrategy = await learnMarkStrategy(
+      clickableCell,
+      c => this.cellDivIsBlank(c));
+    const tangoGridArgs = this.#transformTangoGridDiv(cellDivs, markStrategy);
+    // Solve
+    const markSequence = solveTango(...tangoGridArgs);
+    console.info('Solution identified:', markSequence);
+    // Dispatch
+    await this.clickCells(cellDivs, markSequence, markStrategy, delayMs);
+  }
+
+  async getPreviewData() {
+    const gridDiv = this.getTangoGridDiv();
+    const cellDivs = this.#getCellDivsFromGridDiv(gridDiv);
+    const clickableCell = this.getClickableCell(cellDivs);
+    const markStrategy = await learnMarkStrategy(
+      clickableCell,
+      c => this.cellDivIsBlank(c));
+    const tangoGridArgs = this.#transformTangoGridDiv(cellDivs, markStrategy);
+    const markSequence = solveTango(...tangoGridArgs);
+    const side = Math.sqrt(cellDivs.length);
+    const cells = new Array(cellDivs.length).fill(null).map((_, idx) => ({
+      value: null,
+      isPreset: this.cellDivIsPreset(cellDivs[idx]),
+    }));
+    for (let i = 0; i < cellDivs.length; i++) {
+      if (cells[i].isPreset) {
+        const color = markStrategy.getCellDivColor(cellDivs[i]);
+        cells[i].value = color === 1 ? 'Sun' : color === 2 ? 'Moon' : null;
+      }
+    }
+    for (const move of markSequence) {
+      cells[move.idx].value = move.color === 1 ? 'Sun' : 'Moon';
+    }
+    return { size: side, cells };
+  }
+
+  getTangoGridDiv() {
+    return this.orElseThrow(getGridDiv(d => d.querySelector('.lotka-grid')),
+      'getTangoGridDiv', 'TangoGridDiv selector yielded nothing');
+  }
+
+  #getCellDivsFromGridDiv(gridDiv) {
+    const filtered = Array.from(gridDiv.children)
+      .filter(c => this.gridDivChildIsCellDiv(c));
+    if (filtered.length === 0) {
+      this.orElseThrow(null, 'getCellDivsFromGridDiv', 'gridDiv contained no '
+        + 'children that matched cellDiv filter');
+    }
+    const cellDivs = new Array(filtered.length);
+    for (const cellDiv of filtered) {
+      cellDivs[this.getCellDivIdx(cellDiv)] = cellDiv;
+    }
+    const nullIdx = cellDivs.findIndex(e => !e);
+    if (nullIdx >= 0) {
+      this.orElseThrow(null, 'getCellDivsFromGridDiv',
+        `Undefined cell div at position ${nullIdx}`);
+    }
+    return cellDivs;
+  }
+
+  #transformTangoGridDiv(cellDivs, markStrategy) {
+    const presetSuns = [];
+    const presetMoons = [];
+    const downEqualSigns = [];
+    const downCrosses = [];
+    const rightEqualSigns = [];
+    const rightCrosses = [];
+    for (let i = 0; i < cellDivs.length; i++) {
+      const cellDiv = cellDivs[i];
+      this.#checkPreset(markStrategy, cellDiv, i, presetSuns, presetMoons);
+      this.#checkHasSign(cellDiv, i, downEqualSigns, downCrosses,
+        rightEqualSigns, rightCrosses);
+    }
+    return [presetSuns, presetMoons, downEqualSigns, downCrosses,
+      rightEqualSigns, rightCrosses];
+  }
+
+  gridDivChildIsCellDiv(gridDivChild) {
+    return gridDivChild.attributes?.getNamedItem('data-cell-idx');
+  }
+
+  cellDivIsBlank(cellDiv) {
+    return !cellDiv.classList.contains('lotka-cell--locked')
+      && cellDiv.querySelector('.lotka-cell-content')
+        ?.querySelector('svg')
+        ?.classList
+        ?.contains('lotka-cell-empty');
+  }
+
+  getClickableCell(cellDivs) {
+    for (const cellDiv of cellDivs) {
+      if (!this.cellDivIsPreset(cellDiv)) {
+        return cellDiv;
+      }
+    }
+    this.orElseThrow(null, 'getClickableCell', 'No free cells found');
+  }
+
+  cellDivIsPreset(cellDiv) {
+    return cellDiv.classList.contains('lotka-cell--locked');
+  }
+
+  getCellDivIdx(cellDiv) {
+    const dataCellIdx = cellDiv.attributes
+      ?.getNamedItem('data-cell-idx')?.value;
+    return parseInt(this.orElseThrow(dataCellIdx, 'getCellDivIdx',
+      `Failed to parse an integer data cell ID from ${dataCellIdx}`));
+  }
+
+  getCellDivDownSign(cellDiv) {
+    return cellDiv.querySelector('.lotka-cell-edge--down')
+      ?.querySelector('svg')
+      ?.ariaLabel;
+  }
+
+  getCellDivRightSign(cellDiv) {
+    return cellDiv.querySelector('.lotka-cell-edge--right')
+      ?.querySelector('svg')
+      ?.ariaLabel;
+  }
+
+  #checkPreset(markStrategy, cellDiv, idx, presetSuns, presetMoons) {
+    if (this.cellDivIsPreset(cellDiv)) {
+      const color = markStrategy.getCellDivColor(cellDiv);
+      if (color === 1) {
+        presetSuns.push(idx);
+      } else if (color === 2) {
+        presetMoons.push(idx);
+      } else {
+        log.error('Unexpected color', color,
+          'for preset cell', cellDiv,
+          'at idx', idx);
+        throw new Error('Unexpected color ' + color + ' for preset cell '
+          + 'at idx=' + idx);
+      }
+    }
+  }
+
+  #checkHasSign(cellDiv, idx, downEqualSigns, downCrosses, rightEqualSigns,
+    rightCrosses) {
+    let sign;
+    if ((sign = this.getCellDivDownSign(cellDiv))) {
+      if ('Equal' === sign) {
+        downEqualSigns.push(idx);
+      } else if ('Cross' === sign) {
+        downCrosses.push(idx);
+      }
+    }
+    if ((sign = this.getCellDivRightSign(cellDiv))) {
+      if ('Equal' === sign) {
+        rightEqualSigns.push(idx);
+      } else if ('Cross' === sign) {
+        rightCrosses.push(idx);
+      }
+    }
+  }
+
+  orElseThrow(result, fname, cause) {
+    if (result != null) {
+      return result;
+    }
+    throw new Error(`${fname} failed using TangoDomApiV0: ${cause}`);
+  }
+
+  async clickCells(cellDivs, solution, markStrategy, delayMs = 0) {
+    for (const move of solution) {
+      const cellDiv = cellDivs[move.idx];
+      const targetColor = move.color;
+      const currentColor = markStrategy.getCellDivColor(cellDiv);
+      for (let i = currentColor; i !== targetColor; i = (i + 1) % 3) {
+        await anticipateOneMutation(cellDiv, move.idx);
+        await sleep(delayMs);
+      }
+    }
+  }
+
+}

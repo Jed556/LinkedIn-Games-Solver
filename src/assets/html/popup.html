@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkedIn Puzzle Cracker</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <div class="top-bar">
+    <span></span>
+    <button id="openSettingsBtn" class="icon-btn" type="button" aria-label="Settings">⚙</button>
+  </div>
+
+  <h1>LinkedIn Puzzle Cracker</h1>
+  <p>Please select the game.</p>
+
+  <button class="game" data-game="zip" style="background-color:#ffdccd" type="button">
+    <span class="text">
+      <span class="subtitle">Complete the Path</span>
+      <span class="title">Zip</span>
+    </span>
+    <img src="./images/Zip_logo.svg" alt="Zip Logo" class="logo">
+  </button>
+
+  <button class="game" data-game="sudoku" style="background-color:#d6faee" type="button">
+    <span class="text">
+      <span class="subtitle">The Classic Game, Made Mini</span>
+      <span class="title">Mini Sudoku</span>
+    </span>
+    <img src="./images/Sudoku_logo.svg" alt="Sudoku Logo" class="logo">
+  </button>
+
+  <button class="game" data-game="queens" style="background-color:#f5ebff" type="button">
+    <span class="text">
+      <span class="subtitle">Crown each region</span>
+      <span class="title">Queens</span>
+    </span>
+    <img src="./images/Queens_logo.svg" alt="Queens Logo" class="logo">
+  </button>
+
+  <button class="game" data-game="tango" style="background-color:#e9edf1" type="button">
+    <span class="text">
+      <span class="subtitle">Harmonize the grid</span>
+      <span class="title">Tango</span>
+    </span>
+    <img src="./images/Tango_logo.svg" alt="Tango Logo" class="logo">
+  </button>
+
+  <p class="subtitle stay-tuned">Stay tuned for new games...</p>
+
+  <script src="popup.js" defer></script>
+</body>
+
+</html>

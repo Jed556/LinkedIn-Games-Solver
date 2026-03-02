@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="top-bar">
+        <button id="settingsBackBtn" class="icon-btn" type="button" aria-label="Back">
+            <img src="./images/back-arrow-icon.svg" alt="Back" class="icon">
+        </button>
+    </div>
+
+    <h1>Settings</h1>
+
+    <div class="settings-panel">
+        <p class="settings-title">Auto Solve Delay (ms)</p>
+        <label class="delay-row"><span>Zip</span><input class="delay-input" id="delayZip" type="number" min="0"
+                step="1"></label>
+        <label class="delay-row"><span>Sudoku</span><input class="delay-input" id="delaySudoku" type="number" min="0"
+                step="1"></label>
+        <label class="delay-row"><span>Queens</span><input class="delay-input" id="delayQueens" type="number" min="0"
+                step="1"></label>
+        <label class="delay-row"><span>Tango</span><input class="delay-input" id="delayTango" type="number" min="0"
+                step="1"></label>
+    </div>
+
+    <label class="li-toggle-row" for="showInlineAutoSolveToggle">
+        <span class="li-toggle-label">Show in-game Auto Solve button</span>
+        <span class="li-toggle-state" id="showInlineAutoSolveState">Off</span>
+        <span class="li-toggle">
+            <input id="showInlineAutoSolveToggle" class="li-toggle-input" type="checkbox">
+            <span class="li-toggle-track"></span>
+            <span class="li-toggle-thumb"></span>
+        </span>
+    </label>
+
+    <button id="saveSettingsBtn" class="settings-save" type="button">Save Settings</button>
+    <p id="settingsStatus" class="status-message"></p>
+
+    <script src="settings.js" defer></script>
+</body>
+
+</html>

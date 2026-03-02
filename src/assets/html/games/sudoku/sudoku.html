@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Sudoku</title>
+    <link rel="stylesheet" href="../../styles.css">
+</head>
+
+<body data-game="sudoku">
+    <div class="top-bar">
+        <button id="backBtn" class="icon-btn" type="button" aria-label="Back">
+            <img src="../../images/back-arrow-icon.svg" alt="Back" class="icon">
+        </button>
+        <button id="settingsBtn" class="icon-btn" type="button" aria-label="Settings">⚙</button>
+    </div>
+
+    <div class="game-page-header">
+        <h1 class="game-page-title">Mini Sudoku</h1>
+        <p class="game-page-subtitle">The Classic Game, Made Mini</p>
+        <p id="modal" class="game-page-modal">
+            Please open the LinkedIn Mini Sudoku game page
+            <a id="gameLink" href="https://www.linkedin.com/games/sudoku" target="_blank" rel="noreferrer">Link</a>
+        </p>
+    </div>
+
+    <div id="previewContainer" class="preview-container"></div>
+
+    <p id="status" class="status-message"></p>
+    <button id="autoSolveBtn" disabled class="auto-solve-button" type="button">Auto Solve</button>
+
+    <script src="../gamePage.js" defer></script>
+</body>
+
+</html>

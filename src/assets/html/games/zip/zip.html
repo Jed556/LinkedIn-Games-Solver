@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zip</title>
+    <link rel="stylesheet" href="../../styles.css">
+</head>
+
+<body data-game="zip">
+    <div class="top-bar">
+        <button id="backBtn" class="icon-btn" type="button" aria-label="Back">
+            <img src="../../images/back-arrow-icon.svg" alt="Back" class="icon">
+        </button>
+        <button id="settingsBtn" class="icon-btn" type="button" aria-label="Settings">⚙</button>
+    </div>
+
+    <div class="game-page-header">
+        <h1 class="game-page-title">Zip</h1>
+        <p class="game-page-subtitle">Complete the Path</p>
+        <p id="modal" class="game-page-modal">
+            Please open the LinkedIn Zip game page
+            <a id="gameLink" href="https://www.linkedin.com/games/zip" target="_blank" rel="noreferrer">Link</a>
+        </p>
+    </div>
+
+    <div id="previewContainer" class="preview-container"></div>
+
+    <p id="status" class="status-message"></p>
+    <button id="autoSolveBtn" disabled class="auto-solve-button" type="button">Auto Solve</button>
+
+    <script src="../gamePage.js" defer></script>
+</body>
+
+</html>
