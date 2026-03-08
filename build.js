@@ -51,6 +51,7 @@ const sharedOutputFiles = [
   'zip.js',
   'tango.js',
   'sudoku.js',
+  'crossclimb.js',
   // Background scripts
   'navigationListener.js',
 ];
@@ -61,6 +62,7 @@ const scriptsToBuild = [
   { entry: 'src/main/js/zip/zip.js', out: `${distDir}/zip.js` },
   { entry: 'src/main/js/tango/tango.js', out: `${distDir}/tango.js` },
   { entry: 'src/main/js/sudoku/sudoku.js', out: `${distDir}/sudoku.js` },
+  { entry: 'src/main/js/crossclimb/crossclimb.js', out: `${distDir}/crossclimb.js` },
   // Background script
   {
     entry: 'src/main/js/navigationListener.js',

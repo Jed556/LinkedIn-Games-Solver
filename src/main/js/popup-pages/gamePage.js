@@ -29,6 +29,8 @@ const gameConfig = {
         externalSource: true,
     },
     crossclimb: {
+        matcher: (url) => url.includes('linkedin.com/games/crossclimb'),
+        solverHook: 'crossclimbPopupButtonOnClick',
         externalSource: true,
     },
 };
@@ -48,6 +50,7 @@ const status = document.getElementById('status');
 const previewContainer = document.getElementById('previewContainer');
 
 let activeTab = null;
+let latestExternalAnswers = null;
 
 initialize();
 
@@ -105,8 +108,21 @@ async function hydratePageState() {
     const config = gameConfig[game];
     if (config.externalSource) {
         activeTab = null;
+        if (config.solverHook && config.matcher) {
+            try {
+                const [tab] = await polyfilledBrowser.tabs.query({
+                    active: true,
+                    currentWindow: true,
+                });
+                if (tab?.url && config.matcher(tab.url)) {
+                    activeTab = tab;
+                }
+            } catch (_e) {
+                activeTab = null;
+            }
+        }
         if (autoSolveBtn) {
-            autoSolveBtn.disabled = true;
+            autoSolveBtn.disabled = !(config.solverHook && activeTab?.id);
             autoSolveBtn.textContent = 'Solve';
         }
         if (modal) {
@@ -171,6 +187,25 @@ function invokeHookByName(hookName) {
     }
 }
 
+function invokeHookByNameWithArgs(hookName, hookArgs) {
+    const fn = window[hookName];
+    if (typeof fn !== 'function') {
+        return { ok: false, data: null };
+    }
+    try {
+        const args = Array.isArray(hookArgs) ? hookArgs : [];
+        const result = fn(...args);
+        if (result && typeof result.then === 'function') {
+            return result
+                .then(data => ({ ok: true, data }))
+                .catch(() => ({ ok: false, data: null }));
+        }
+        return { ok: true, data: result };
+    } catch (_e) {
+        return { ok: false, data: null };
+    }
+}
+
 function clearPreview() {
     if (previewContainer) {
         previewContainer.innerHTML = '';
@@ -181,25 +216,43 @@ function getDailySolutionsCandidateUrls() {
     const now = new Date();
     const dates = [new Date(now), new Date(now)];
     dates[1].setDate(dates[1].getDate() - 1);
-    return dates.map((d) => {
+    const candidates = [];
+    for (const d of dates) {
         const month = d.toLocaleString('en-US', { month: 'long' }).toLowerCase();
         const day = d.getDate();
         const year = d.getFullYear();
-        return `https://fandomwire.com/all-linkedin-games-solutions-for-today-${month}-${day}-${year}/`;
-    });
+        const sourceUrl = `https://fandomwire.com/all-linkedin-games-solutions-for-today-${month}-${day}-${year}/`;
+        candidates.push({
+            sourceUrl,
+            requestUrl: sourceUrl,
+        });
+        candidates.push({
+            sourceUrl,
+            requestUrl: `https://r.jina.ai/http://fandomwire.com/all-linkedin-games-solutions-for-today-${month}-${day}-${year}/`,
+        });
+    }
+    return candidates;
 }
 
 async function fetchDailySolutionsContent() {
     const candidates = getDailySolutionsCandidateUrls();
-    for (const url of candidates) {
+    for (const candidate of candidates) {
         try {
-            const response = await fetch(url, { method: 'GET' });
+            const response = await fetch(candidate.requestUrl, {
+                method: 'GET',
+                headers: {
+                    Accept: 'text/html,text/plain;q=0.9,*/*;q=0.8',
+                },
+            });
             if (!response.ok) {
                 continue;
             }
             const content = await response.text();
             if (content && content.includes('LinkedIn')) {
-                return { content, url };
+                return {
+                    content,
+                    url: candidate.sourceUrl,
+                };
             }
         } catch (_e) {
         }
@@ -237,6 +290,7 @@ async function loadExternalAnswers() {
         return;
     }
     const extracted = extractRemainingLinkedInGameAnswers(content);
+    latestExternalAnswers = extracted;
     if (game === 'pinpoint') {
         if (!extracted.pinpointAnswer) {
             setStatus('Pinpoint answer not found in article.');
@@ -484,7 +538,7 @@ function getMoonSvgMarkup() {
 }
 
 function solveActiveGame() {
-    if (gameConfig[game]?.externalSource) {
+    if (gameConfig[game]?.externalSource && !gameConfig[game]?.solverHook) {
         setStatus('Solve is not available yet for this game.');
         return;
     }
@@ -494,6 +548,12 @@ function solveActiveGame() {
     }
     const { solverHook } = gameConfig[game];
     setStatus('Solving...');
+
+    if (game === 'crossclimb') {
+        solveCrossclimbWithFetchedWords(solverHook);
+        return;
+    }
+
     polyfilledBrowser.scripting.executeScript({
         target: { tabId: activeTab.id },
         func: invokeHookByName,
@@ -508,4 +568,52 @@ function solveActiveGame() {
     }).catch(() => {
         setStatus('Failed to run solver on this tab.');
     });
+}
+
+function getCrossclimbSolveWords(crossclimb) {
+    if (!crossclimb) {
+        return [];
+    }
+    if (Array.isArray(crossclimb.orderedHint) && crossclimb.orderedHint.length > 0) {
+        return crossclimb.orderedHint;
+    }
+    if (Array.isArray(crossclimb.ladderWords)) {
+        return crossclimb.ladderWords;
+    }
+    return [];
+}
+
+async function solveCrossclimbWithFetchedWords(solverHook) {
+    try {
+        if (!latestExternalAnswers?.crossclimb) {
+            const { content } = await fetchDailySolutionsContent();
+            if (!content) {
+                setStatus('Could not fetch daily solutions right now.');
+                return;
+            }
+            latestExternalAnswers = extractRemainingLinkedInGameAnswers(content);
+        }
+
+        const solveWords = getCrossclimbSolveWords(latestExternalAnswers?.crossclimb);
+        if (solveWords.length === 0) {
+            setStatus('Crossclimb answers not found in article.');
+            return;
+        }
+
+        const results = await polyfilledBrowser.scripting.executeScript({
+            target: { tabId: activeTab.id },
+            func: invokeHookByNameWithArgs,
+            args: [solverHook, [solveWords]],
+        });
+
+        const invoked = results?.[0]?.result?.ok === true;
+        const solved = !!results?.[0]?.result?.data;
+        if (invoked && solved) {
+            setStatus('Solved.');
+        } else {
+            setStatus('Unable to fill Crossclimb rows on this tab.');
+        }
+    } catch (_e) {
+        setStatus('Failed to run solver on this tab.');
+    }
 }

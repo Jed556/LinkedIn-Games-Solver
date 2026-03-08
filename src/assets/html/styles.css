@@ -460,6 +460,8 @@ p {
     width: 32px;
     height: 32px;
     border: 1px solid #d1d5db;
+    --tango-cell-bg: #fff;
+    background: var(--tango-cell-bg);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -488,6 +490,10 @@ p {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    --sun-color: #ffb31e;
+    --sun-border: #cb6c2f;
+    --moon-color: #4c8ce6;
+    --moon-border: #1855aa;
 }
 
 .tango-mark svg {
@@ -496,13 +502,19 @@ p {
 }
 
 .tango-mark.sun svg path {
-    stroke: #f5b301;
+    fill: var(--sun-color);
+    stroke: var(--sun-border);
 }
 
 .tango-mark.moon svg path {
-    stroke: #7aa4e8;
+    fill: var(--moon-color);
+    stroke: var(--moon-border);
+}
+
+.tango-mark.moon svg #Cut {
+    fill: var(--tango-cell-bg, #fff);
 }
 
 .tango-preview-cell.preset {
-    background: #e5e7eb;
+    --tango-cell-bg: #e5e7eb;
 }

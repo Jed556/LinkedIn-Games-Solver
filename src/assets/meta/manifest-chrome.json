@@ -15,7 +15,8 @@
   "host_permissions": [
     "*://*.linkedin.com/games/*",
     "*://fandomwire.com/*",
-    "*://*.fandomwire.com/*"
+    "*://*.fandomwire.com/*",
+    "*://r.jina.ai/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -52,6 +53,14 @@
       ],
       "js": [
         "sudoku.js"
+      ]
+    },
+    {
+      "matches": [
+        "*://*.linkedin.com/games/crossclimb*"
+      ],
+      "js": [
+        "crossclimb.js"
       ]
     }
   ],

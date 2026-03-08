@@ -1,13 +1,22 @@
-import { getGridDiv, anticipateOneMutation, sleep } from '../util.js';
+import {
+  getGridDiv,
+  anticipateOneMutation,
+  sleep,
+  createInlineControlButtonInstaller,
+} from '../util.js';
 import { learnMarkStrategy } from './markStrategy.js';
 import { solveTango } from './solver.js';
 import { getSettings } from '../settings.js';
 
 const INLINE_AUTOSOLVE_BUTTON_ID = 'linkedin-games-solver-tango-inline-autosolve';
-const INLINE_AUTOSOLVE_MAX_RETRIES = 30;
-let inlineAutoSolveObserver = null;
-let inlineAutoSolveRetryTimer = null;
-let inlineAutoSolveRetryCount = 0;
+const inlineAutoSolveButtonInstaller = createInlineControlButtonInstaller({
+  buttonId: INLINE_AUTOSOLVE_BUTTON_ID,
+  buttonLabel: 'Auto Solve',
+  onClick: () => {
+    autoSolve();
+  },
+  getControlsDiv,
+});
 
 export async function autoSolve() {
   const settings = await getSettings();
@@ -52,163 +61,24 @@ export async function installInlineAutoSolveButton() {
   if (!settings.showInlineAutoSolveButton) {
     return;
   }
-  ensureInlineAutoSolveButton();
-  ensureInlineAutoSolveObserver();
-  ensureInlineAutoSolveRetryLoop();
-}
-
-function ensureInlineAutoSolveRetryLoop() {
-  if (inlineAutoSolveRetryTimer) {
-    return;
-  }
-  inlineAutoSolveRetryTimer = setInterval(() => {
-    const hasButton = ensureInlineAutoSolveButton();
-    ensureInlineAutoSolveObserver();
-    if (hasButton || ++inlineAutoSolveRetryCount >= INLINE_AUTOSOLVE_MAX_RETRIES) {
-      clearInterval(inlineAutoSolveRetryTimer);
-      inlineAutoSolveRetryTimer = null;
-      inlineAutoSolveRetryCount = 0;
-    }
-  }, 1000);
-}
-
-function ensureInlineAutoSolveObserver() {
-  if (inlineAutoSolveObserver) {
-    return;
-  }
-  let controlsDiv;
-  try {
-    controlsDiv = getControlsDiv();
-  } catch (_e) {
-    return;
-  }
-
-  const doc = controlsDiv.ownerDocument;
-  const observerTarget = controlsDiv.parentElement ?? doc.body;
-  inlineAutoSolveObserver = new MutationObserver(() => {
-    ensureInlineAutoSolveButton();
-  });
-  inlineAutoSolveObserver.observe(observerTarget, {
-    childList: true,
-    subtree: true,
-  });
-}
-
-function ensureInlineAutoSolveButton() {
-  let controlsDiv;
-  try {
-    controlsDiv = getControlsDiv();
-  } catch (_e) {
-    return false;
-  }
-
-  const doc = controlsDiv.ownerDocument;
-  const existingButton = doc.getElementById(INLINE_AUTOSOLVE_BUTTON_ID);
-  if (existingButton) {
-    if (!controlsDiv.contains(existingButton)) {
-      const existingWrapper = getButtonWrapper(existingButton);
-      if (existingWrapper) {
-        controlsDiv.appendChild(existingWrapper);
-      } else {
-        controlsDiv.appendChild(existingButton);
-      }
-    }
-    return true;
-  }
-
-  const nativeButton = controlsDiv.querySelector('button');
-  const nativeWrapper = getButtonWrapper(nativeButton);
-  const wrapper = nativeWrapper ? nativeWrapper.cloneNode(false) : doc.createElement('span');
-  if (wrapper.tagName === 'SPAN' && !wrapper.classList.contains('under-board-controls-item')) {
-    wrapper.classList.add('under-board-controls-item');
-  }
-
-  const solveButton = nativeButton ? nativeButton.cloneNode(true) : doc.createElement('button');
-  // remove any disabled state that might have been copied from the native
-  // element; we always want this button enabled.
-  solveButton.removeAttribute('disabled');
-  solveButton.removeAttribute('aria-disabled');
-  solveButton.id = INLINE_AUTOSOLVE_BUTTON_ID;
-  solveButton.type = 'button';
-  solveButton.setAttribute('data-control-btn', 'auto-solve');
-  solveButton.setAttribute('aria-disabled', 'false');
-
-  setButtonText(solveButton, doc, 'Auto Solve');
-  solveButton.addEventListener('click', () => {
-    autoSolve();
-  });
-
-  wrapper.replaceChildren(solveButton);
-  controlsDiv.appendChild(wrapper);
-  return true;
-}
-
-function getButtonWrapper(button) {
-  if (!button) {
-    return null;
-  }
-  const parent = button.parentElement;
-  if (!parent) {
-    return null;
-  }
-  if (parent.matches('span.under-board-controls-item, [data-control-btn-container]')) {
-    return parent;
-  }
-  if (parent.childElementCount === 1) {
-    return parent;
-  }
-  return null;
-}
-
-function setButtonText(button, doc, label) {
-  const textContainer = button.querySelector('.artdeco-button__text, span span, span');
-  if (textContainer) {
-    textContainer.textContent = label;
-    return;
-  }
-  const textSpan = doc.createElement('span');
-  textSpan.className = 'artdeco-button__text';
-  textSpan.textContent = label;
-  button.replaceChildren(textSpan);
+  inlineAutoSolveButtonInstaller.install();
 }
 
 function getControlsDiv() {
-  try {
-    const preferred = getGridDiv(d => d.querySelector(
-      '.lotka-under-board-controls-container, [data-testid="under-board-controls-container"], [data-testid="under-board-controls"]'));
-    if (preferred) {
-      return preferred;
-    }
-  } catch (_e) {
+  const selector = '[data-testid="under-board-controls-container"], [data-testid="under-board-controls"]';
+  const preferred = document.querySelector(selector);
+  if (preferred) {
+    return preferred;
   }
-  const gridDiv = getTangoGridDivForButtonInstall();
-  const fallback = getSiblingButtonContainer(gridDiv);
-  if (fallback) {
-    return fallback;
+
+  const frame = document.querySelector('iframe');
+  const frameDoc = frame?.contentDocument || frame?.contentWindow?.document;
+  const inFrame = frameDoc?.querySelector(selector);
+  if (inFrame) {
+    return inFrame;
   }
+
   throw new Error('Could not locate Tango controls container');
-}
-
-function getTangoGridDivForButtonInstall() {
-  return getGridDiv(d => d.querySelector('[data-testid="interactive-grid"], .lotka-grid'));
-}
-
-function getSiblingButtonContainer(gridDiv) {
-  let current = gridDiv;
-  for (let depth = 0; depth < 6 && current?.parentElement; depth++) {
-    const parent = current.parentElement;
-    const siblings = Array.from(parent.children).filter(c => c !== current);
-    for (const sibling of siblings) {
-      if (sibling.tagName === 'BUTTON') {
-        return sibling.parentElement ?? sibling;
-      }
-      if (sibling.querySelector('button')) {
-        return sibling;
-      }
-    }
-    current = parent;
-  }
-  return null;
 }
 
 class TangoDomApiV1 {

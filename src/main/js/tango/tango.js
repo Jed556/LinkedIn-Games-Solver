@@ -1,5 +1,8 @@
 import { autoSolve, getPreviewData, installInlineAutoSolveButton } from './dom.js';
 
-window['tangoPopupButtonOnClick'] = autoSolve;
-window['tangoPopupPreviewData'] = getPreviewData;
-installInlineAutoSolveButton();
+if (!window.__linkedinGamesSolverTangoInitialized) {
+	window.__linkedinGamesSolverTangoInitialized = true;
+	window['tangoPopupButtonOnClick'] = autoSolve;
+	window['tangoPopupPreviewData'] = getPreviewData;
+	installInlineAutoSolveButton();
+}

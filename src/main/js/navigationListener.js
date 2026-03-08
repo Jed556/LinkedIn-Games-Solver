@@ -12,14 +12,14 @@ const gameScriptMap = {
 };
 
 polyfilledBrowser.webNavigation.onHistoryStateUpdated
-    .addListener(({ tabId, url }) => {
-      const path = new URL(url).pathname;
-      for (const [prefix, script] of Object.entries(gameScriptMap)) {
-        if (path.startsWith(prefix)) {
-          polyfilledBrowser.scripting.executeScript({
-            target: { tabId },
-            files: [`${script}`],
-          }).catch(err => console.error('Injection failed', err));
-        }
+  .addListener(({ tabId, url }) => {
+    const path = new URL(url).pathname;
+    for (const [prefix, script] of Object.entries(gameScriptMap)) {
+      if (path.startsWith(prefix)) {
+        polyfilledBrowser.scripting.executeScript({
+          target: { tabId },
+          files: [`${script}`],
+        }).catch(err => console.error('Injection failed', err));
       }
-    });
+    }
+  });
